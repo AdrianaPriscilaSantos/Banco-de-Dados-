@@ -1,0 +1,91 @@
+
+-- Criacao usuario trans_madeira;
+
+CREATE USER trans_madeira WITH
+  LOGIN
+  SUPERUSER
+  INHERIT
+  CREATEDB
+  CREATEROLE
+  REPLICATION;
+  
+  
+-- Criacao DATABASE bdtransmadeira;
+
+CREATE DATABASE bdtransmadeira
+    WITH 
+    OWNER = trans_madeira
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'Portuguese_Brazil.1252'
+    LC_CTYPE = 'Portuguese_Brazil.1252'
+    TABLESPACE = pg_default
+    CONNECTION LIMIT = -1;
+
+
+
+--- Apos criar tabelas permissões de SELECT, INSERT, DELETE e UPDATE para o usuario trans_madeira
+ 
+ GRANT SELECT, INSERT, DELETE, UPDATE ON usuario, proprietario, empreendimento, estados, cidades, pais, madeira, rota, guia, gtf3, veiculo TO trans_madeira WITH GRANT OPTION;
+
+
+
+-- Permissao para o esquema public, to tipo USAGE para o usuário trans_madeira. 
+
+GRANT USAGE ON schema public TO trans_madeira;
+
+
+
+--- Trigger preenche o campo capacidade da tabela veiculo apos a insercao 
+
+CREATE OR REPLACE FUNCTION trigger_calcula_capacidade()
+  RETURNS trigger AS
+$BODY$
+BEGIN
+	new.capacidade := (new.altura*new.largura*new.comprimento);
+ RETURN NEW;
+END;
+$BODY$
+LANGUAGE plpgsql VOLATILE
+COST 100;
+ 
+  
+CREATE TRIGGER trigger_calcula_capacidade
+  BEFORE INSERT
+  ON veiculo
+  FOR EACH ROW
+  EXECUTE PROCEDURE trigger_calcula_capacidade();
+
+
+
+--- View do tipo de Guia de Transporte Florestal
+
+CREATE VIEW view_guia AS
+SELECT c.descricao AS guia_transporte_florestal,
+    b.nome_especie AS especie_madeira,
+    e.nome AS cidade_origem,
+    x.nome AS cidade_destino,
+    f.capacidade AS capacidade_transporte_veiculo,
+    g.razao_social AS empreendimento_responsavel
+   FROM guia a
+	 JOIN madeira b ON a.id_madeira = b.id_madeira
+     JOIN descricao_guias c ON a.id_guia = c.id_descricao
+     JOIN rota d ON a.id_guia = a.id_guia
+     JOIN cidades e ON e.id_cidade = d.id_municipio_origem
+	 JOIN cidades x ON x.id_cidade = d.id_municipio_destino
+     JOIN veiculo f ON d.id_veiculo = f.id_veiculo
+     JOIN empreendimento g ON g.id_empreendimento = f.empreendimento_id_empreendimento
+	 where d.id_guia = a.id_guia;
+
+
+
+--- View soma o volume transportado por especie de madeira
+
+CREATE VIEW view_volume_transportado AS 
+SELECT distinct c.nome_especie, sum(b.capacidade) FROM guia a inner join veiculo b
+on a.id_veiculo=b.id_veiculo
+inner join madeira c
+on a.id_madeira = c.id_madeira
+group by c.nome_especie ;
+
+
+ 
